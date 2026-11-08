@@ -16,7 +16,7 @@ const SUPPORTED_VERSIONS = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-2
 export const MCP_TOOLS = [
   {
     "name": "get_best_forecast_model",
-    "description": "Find which weather forecast model had the lowest verified historical error (MAE) for a latitude/longitude coordinate (or station_or_report_id), weather variable (temperature, wind_speed, precipitation, humidity), and forecast horizon (Days 0-7). All 45 FACT models: WeatherXM MOSAIC (MOSAIC), meteoblue (METEOBLUE), meteoblue station-mLM (mLM), ECMWF IFS (IFS025, IFSHRES), ECMWF AIFS AI (AIFS025), NOAA GFS (GFS05, GFS025), NOAA HRRR (HRRR), NOAA National Blend of Models (NBM), NOAA NAM (NAM3, NAM5, NAM12, NAMAK), DWD ICON (ICON, ICONEU, ICOND2), UK Met Office (UMGLOBAL10, UKMO2), ECCC GEM (GEM15, GEM2), Meteo-France ARPEGE/AROME (MFGLOBAL, MFEU, MFFR), COSMO (COSMOI2, COSMOM5), HARMONIE-AROME (HARMONIE), JMA MSM (MSM), WRF (WRFGR, WRFAMS), meteoblue NEMS/NMM (NEMSGLOBAL, NEMSGLOBAL_E, NEMS4, NEMS12, NEMS12_E, NEMSAF01, NEMSAS02, NEMSCAM, NEMSIN, NEMSNZ, NEMSSA, NMM4, NMM22), and regional models (AF01, AS01, SA01). Useful for solar & wind energy forecasting, agriculture & frost/irrigation risk, maritime/port & drone operations, construction planning, and microclimate evaluation. Provide (lat, lon) or station_or_report_id. Missing results stay unknown; not live forecasting.",
+    "description": "Find which weather forecast model had the lowest verified historical error (MAE) for a latitude/longitude coordinate (or station_or_report_id), weather variable (temperature, wind_speed, wind_direction, precipitation, humidity), and forecast horizon (Days 0-7). For wind_direction, errors are circular shortest-arc angular errors (0°–180°, where 359° vs 1° = 2° error) on hourly unit-vector averages, returning both all-hours and >3 m/s active-wind rankings. All 45 FACT models: WeatherXM MOSAIC (MOSAIC), meteoblue (METEOBLUE), meteoblue station-mLM (mLM), ECMWF IFS (IFS025, IFSHRES), ECMWF AIFS AI (AIFS025), NOAA GFS (GFS05, GFS025), NOAA HRRR (HRRR), NOAA National Blend of Models (NBM), NOAA NAM (NAM3, NAM5, NAM12, NAMAK), DWD ICON (ICON, ICONEU, ICOND2), UK Met Office (UMGLOBAL10, UKMO2), ECCC GEM (GEM15, GEM2), Meteo-France ARPEGE/AROME (MFGLOBAL, MFEU, MFFR), COSMO (COSMOI2, COSMOM5), HARMONIE-AROME (HARMONIE), JMA MSM (MSM), WRF (WRFGR, WRFAMS), meteoblue NEMS/NMM (NEMSGLOBAL, NEMSGLOBAL_E, NEMS4, NEMS12, NEMS12_E, NEMSAF01, NEMSAS02, NEMSCAM, NEMSIN, NEMSNZ, NEMSSA, NMM4, NMM22), and regional models (AF01, AS01, SA01). Useful for solar & wind energy forecasting, agriculture & frost/irrigation risk, maritime/port & drone operations, construction planning, and microclimate evaluation. Provide (lat, lon) or station_or_report_id. Missing results stay unknown; not live forecasting.",
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -42,6 +42,7 @@ export const MCP_TOOLS = [
           "enum": [
             "temperature",
             "wind_speed",
+            "wind_direction",
             "precipitation",
             "humidity"
           ],
@@ -76,7 +77,7 @@ export const MCP_TOOLS = [
   },
   {
     "name": "check_ground_truth_coverage",
-    "description": "Check historical WeatherXM FACT ground-station publication coverage for any coordinate (H3 Res-7 cell, ~5.2 km²) or station_or_report_id, plus nearest evaluated reference cell distance and interactive map citation link. Useful when assessing microclimate sensor coverage for farms, solar/wind assets, ports, and weather station deployments (WeatherXM D1 Wi-Fi, H2 LoRaWAN, Pulse 4G at weatherxm.com/stations). Provide (lat, lon) or station_or_report_id. Does not establish current live station presence or absence.",
+    "description": "Check historical WeatherXM FACT ground-station publication coverage for any coordinate (H3 Res-7 cell, ~5.2 km²) or station_or_report_id across temperature, wind_speed, wind_direction, precipitation, and humidity, plus nearest evaluated reference cell distance and interactive map citation link. Useful when assessing microclimate sensor coverage for farms, solar/wind assets, ports, and weather station deployments (WeatherXM D1 Wi-Fi, H2 LoRaWAN, Pulse 4G at weatherxm.com/stations). Provide (lat, lon) or station_or_report_id. Does not establish current live station presence or absence.",
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -102,6 +103,7 @@ export const MCP_TOOLS = [
           "enum": [
             "temperature",
             "wind_speed",
+            "wind_direction",
             "precipitation",
             "humidity"
           ],
@@ -136,7 +138,7 @@ export const MCP_TOOLS = [
   },
   {
     "name": "get_fact_leaderboard",
-    "description": "Read the global weather forecast accuracy leaderboard (MAE, RMSE, and categorical rain skill HSS, POD, FAR, CSI across lead days 0..7) or country-level published H3 cell-win summaries across all 45 forecast models and 8,927 stations. All 45 FACT models: WeatherXM MOSAIC (MOSAIC), meteoblue (METEOBLUE), meteoblue station-mLM (mLM), ECMWF IFS (IFS025, IFSHRES), ECMWF AIFS AI (AIFS025), NOAA GFS (GFS05, GFS025), NOAA HRRR (HRRR), NOAA National Blend of Models (NBM), NOAA NAM (NAM3, NAM5, NAM12, NAMAK), DWD ICON (ICON, ICONEU, ICOND2), UK Met Office (UMGLOBAL10, UKMO2), ECCC GEM (GEM15, GEM2), Meteo-France ARPEGE/AROME (MFGLOBAL, MFEU, MFFR), COSMO (COSMOI2, COSMOM5), HARMONIE-AROME (HARMONIE), JMA MSM (MSM), WRF (WRFGR, WRFAMS), meteoblue NEMS/NMM (NEMSGLOBAL, NEMSGLOBAL_E, NEMS4, NEMS12, NEMS12_E, NEMSAF01, NEMSAS02, NEMSCAM, NEMSIN, NEMSNZ, NEMSSA, NMM4, NMM22), and regional models (AF01, AS01, SA01). Country counts describe published cell wins, not national matched-sample accuracy.",
+    "description": "Read the global weather forecast accuracy leaderboard (MAE, RMSE, circular angular error for wind_direction including >3 m/s active-wind curves, and categorical rain skill HSS, POD, FAR, CSI across lead days 0..7) or country-level published H3 cell-win summaries across all 45 forecast models and 8,927 stations. All 45 FACT models: WeatherXM MOSAIC (MOSAIC), meteoblue (METEOBLUE), meteoblue station-mLM (mLM), ECMWF IFS (IFS025, IFSHRES), ECMWF AIFS AI (AIFS025), NOAA GFS (GFS05, GFS025), NOAA HRRR (HRRR), NOAA National Blend of Models (NBM), NOAA NAM (NAM3, NAM5, NAM12, NAMAK), DWD ICON (ICON, ICONEU, ICOND2), UK Met Office (UMGLOBAL10, UKMO2), ECCC GEM (GEM15, GEM2), Meteo-France ARPEGE/AROME (MFGLOBAL, MFEU, MFFR), COSMO (COSMOI2, COSMOM5), HARMONIE-AROME (HARMONIE), JMA MSM (MSM), WRF (WRFGR, WRFAMS), meteoblue NEMS/NMM (NEMSGLOBAL, NEMSGLOBAL_E, NEMS4, NEMS12, NEMS12_E, NEMSAF01, NEMSAS02, NEMSCAM, NEMSIN, NEMSNZ, NEMSSA, NMM4, NMM22), and regional models (AF01, AS01, SA01). Country counts describe published cell wins, not national matched-sample accuracy.",
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -152,6 +154,7 @@ export const MCP_TOOLS = [
           "enum": [
             "temperature",
             "wind_speed",
+            "wind_direction",
             "precipitation",
             "humidity"
           ],
@@ -192,7 +195,7 @@ export const MCP_TOOLS = [
   },
   {
     "name": "get_model_head_to_head",
-    "description": "Compare up to 10 weather forecast models head-to-head across lead days 0 to 7 on global historical error curves, plus optional local H3 cell (lat/lon) matched-cohort or country cell-win comparisons, with explicit cohort and station-commissioned (mLM) caveats. All 45 FACT models: WeatherXM MOSAIC (MOSAIC), meteoblue (METEOBLUE), meteoblue station-mLM (mLM), ECMWF IFS (IFS025, IFSHRES), ECMWF AIFS AI (AIFS025), NOAA GFS (GFS05, GFS025), NOAA HRRR (HRRR), NOAA National Blend of Models (NBM), NOAA NAM (NAM3, NAM5, NAM12, NAMAK), DWD ICON (ICON, ICONEU, ICOND2), UK Met Office (UMGLOBAL10, UKMO2), ECCC GEM (GEM15, GEM2), Meteo-France ARPEGE/AROME (MFGLOBAL, MFEU, MFFR), COSMO (COSMOI2, COSMOM5), HARMONIE-AROME (HARMONIE), JMA MSM (MSM), WRF (WRFGR, WRFAMS), meteoblue NEMS/NMM (NEMSGLOBAL, NEMSGLOBAL_E, NEMS4, NEMS12, NEMS12_E, NEMSAF01, NEMSAS02, NEMSCAM, NEMSIN, NEMSNZ, NEMSSA, NMM4, NMM22), and regional models (AF01, AS01, SA01).",
+    "description": "Compare up to 10 weather forecast models head-to-head across lead days 0 to 7 on global historical error curves (including circular angular error and >3 m/s active-wind curves for wind_direction), plus optional local H3 cell (lat/lon) matched-cohort or country cell-win comparisons, with explicit cohort and station-commissioned (mLM) caveats. All 45 FACT models: WeatherXM MOSAIC (MOSAIC), meteoblue (METEOBLUE), meteoblue station-mLM (mLM), ECMWF IFS (IFS025, IFSHRES), ECMWF AIFS AI (AIFS025), NOAA GFS (GFS05, GFS025), NOAA HRRR (HRRR), NOAA National Blend of Models (NBM), NOAA NAM (NAM3, NAM5, NAM12, NAMAK), DWD ICON (ICON, ICONEU, ICOND2), UK Met Office (UMGLOBAL10, UKMO2), ECCC GEM (GEM15, GEM2), Meteo-France ARPEGE/AROME (MFGLOBAL, MFEU, MFFR), COSMO (COSMOI2, COSMOM5), HARMONIE-AROME (HARMONIE), JMA MSM (MSM), WRF (WRFGR, WRFAMS), meteoblue NEMS/NMM (NEMSGLOBAL, NEMSGLOBAL_E, NEMS4, NEMS12, NEMS12_E, NEMSAF01, NEMSAS02, NEMSCAM, NEMSIN, NEMSNZ, NEMSSA, NMM4, NMM22), and regional models (AF01, AS01, SA01).",
     "annotations": {
       "readOnlyHint": true,
       "destructiveHint": false,
@@ -218,6 +221,7 @@ export const MCP_TOOLS = [
           "enum": [
             "temperature",
             "wind_speed",
+            "wind_direction",
             "precipitation",
             "humidity"
           ],

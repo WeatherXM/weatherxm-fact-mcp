@@ -11,7 +11,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'demo/public/data');
 const OUT = path.join(SRC, 'mcp');
 fs.mkdirSync(OUT, { recursive: true });
-const variables = ['temperature', 'wind_speed', 'precipitation', 'humidity'];
+const variables = ['temperature', 'wind_speed', 'wind_direction', 'precipitation', 'humidity'];
 const sourceFiles = [
   'summary_metrics.json',
   'cell_to_country.json',
@@ -124,6 +124,12 @@ for (const variable of variables) {
             pSkill = [ci, ps.champion_hss, ri ?? null, ps.runner_up_hss ?? null, ps.spread_hss ?? null, ps.rain_days_observed ?? null, ps.n_days ?? null, skillHorizon];
           }
         }
+      } else if (variable === 'wind_direction' && Array.isArray(row.above_3ms) && row.above_3ms.length > 0) {
+        pSkill = row.above_3ms.map(t => {
+          const mi = modelIndex.get(t[0]);
+          if (mi === undefined) throw new Error('Unknown model in above_3ms: ' + t[0]);
+          return [mi, t[1], t[2], t[3], t[4], t[5]];
+        });
       }
       cells[row.cell_id] ??= {};
       // Only actual source horizon. Never substitute a daily row for pooled 'all'.
@@ -144,7 +150,7 @@ for (const variable of variables) {
 emit('cells_meta.json', {
   schema: '2.1', index_version: version, generated_at: new Date().toISOString(),
   data_as_of: '2025-12-31', evaluation_window: ['2025-02-13', '2025-12-31'],
-  methodology_url: 'https://github.com/WeatherXM/FACT/blob/main/docs/FACT_METHODOLOGY.md',
+  methodology_url: 'https://github.com/WeatherXM/weatherxm-fact-mcp/blob/main/docs/FACT_METHODOLOGY.md',
   methodology_note: 'Archive dates and QoD threshold are declared by the published FACT methodology; this re-indexer does not independently revalidate the raw Parquet quality gate.',
   source_hashes: sourceHashes, qod_threshold_declared: 0.8, h3_resolution: 7,
   archive_station_count_declared: summary.global_kpis.total_stations,
