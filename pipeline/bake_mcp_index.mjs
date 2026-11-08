@@ -124,7 +124,7 @@ for (const variable of variables) {
             pSkill = [ci, ps.champion_hss, ri ?? null, ps.runner_up_hss ?? null, ps.spread_hss ?? null, ps.rain_days_observed ?? null, ps.n_days ?? null, skillHorizon];
           }
         }
-      } else if (variable === 'wind_direction' && Array.isArray(row.above_3ms) && row.above_3ms.length > 0) {
+      } else if ((variable === 'wind_direction' || variable === 'wind_speed') && Array.isArray(row.above_3ms) && row.above_3ms.length > 0) {
         pSkill = row.above_3ms.map(t => {
           const mi = modelIndex.get(t[0]);
           if (mi === undefined) throw new Error('Unknown model in above_3ms: ' + t[0]);
@@ -206,7 +206,7 @@ emit('cells_meta.json', {
     WRFAMS: 'WRF Americas',
     MSM: 'JMA MSM (Japan 5 km)'
   },
-  commissioned_models: ['mLM'], countries, cells: metaCells
+  commissioned_models: ['mLM'], station_informed_models: ['MOSAIC', 'mLM'], countries, cells: metaCells
 });
 emit('country_leaderboards.json', {
   schema: '2.1', index_version: version, global_curves: summary.data,

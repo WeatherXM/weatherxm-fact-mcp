@@ -48,8 +48,8 @@ Raw sub-hourly station telemetry is aggregated in UTC to match what each forecas
 | :--- | :--- | :--- | :--- |
 | **Temperature (`temperature`, `°C`)** | 1-minute mean nearest the top of the hour (`±10 min` window) | 2 m air temperature at valid hour | `40.0 °C` |
 | **Relative Humidity (`humidity`, `%`)** | 1-minute mean nearest the top of the hour (`±10 min` window) | 2 m relative humidity at valid hour | `100.0 %` |
-| **Wind Speed (`wind_speed`, `m/s`)** | Vector average of the hour's measurements, scaled from sensor height to 10 m (`×1.35`) | 10 m wind speed at valid hour | `30.0 m/s` |
-| **Wind Direction (`°`)** | Vector average of the hour (shortest-arc circular difference in `[0°, 180°]`) | 10 m wind direction | `180.0 °` |
+| **Wind Speed (`wind_speed`, `m/s`)** | Magnitude of the hour's vector-averaged u/v, multiplied by a fixed `1.35135` (pipeline comment: 2 m → 10 m, source meteoblue) for every station regardless of actual mast height. Default rankings use all hours; an optional, separate *windier days* subset keeps station-days with scaled daily-mean observed speed `>= 3.0 m/s` (conditioned subset, not a height correction; see methodology §3.2a) | 10 m wind speed at valid hour | `30.0 m/s` |
+| **Wind Direction (`°`)** | Speed-weighted vector average of the hour (shortest-arc circular difference in `[0°, 180°]`); active-wind subset uses raw sensor speed `> 3 m/s` | 10 m wind direction | `180.0 °` |
 | **Precipitation (`precipitation`, `mm`)** | Hourly/daily difference of cumulative rain counter (negative resets clamped to `0`) | Hourly & 24-hour UTC accumulated precipitation | `50.0 mm` |
 
 **Lead-day definition:** Lead time is measured from **when the model run started (`initialization_date` in UTC)**—never from when the forecast was fetched—so all 45 models are evaluated on a single, fair synoptic clock:
@@ -85,20 +85,24 @@ $$\text{Pooled MAE} = \frac{\sum_{i=1}^{K} n_i \cdot \text{MAE}_i}{\sum_{i=1}^{K
 #### Reference Implementation (DuckDB SQL & Python — from [`pipeline/bake_fact_summary.py`](./pipeline/bake_fact_summary.py))
 
 ```sql
--- Exact DuckDB aggregation used to bake global lead-day curves (pipeline/bake_fact_summary.py)
-SELECT 
-    model,
-    datediff('day', cast(initialization_date as timestamp), cast(target_date as timestamp)) AS lead_day,
-    count(*) AS station_days,
-    round(sum(daily_MAE * n_samples_MAE_RMSE) / sum(n_samples_MAE_RMSE), 3) AS pooled_mae,
-    round(sqrt(sum(daily_RMSE * daily_RMSE * n_samples_MAE_RMSE) / sum(n_samples_MAE_RMSE)), 3) AS pooled_rmse,
-    sum(n_samples_MAE_RMSE) AS total_hourly_samples
-FROM read_parquet('data/2025_full/*/*.parquet')
-WHERE variable = 'temperature'
-  AND daily_MAE BETWEEN 0 AND 40.0
-  AND n_samples_MAE_RMSE >= 18
-  AND datediff('day', cast(initialization_date as timestamp), cast(target_date as timestamp)) BETWEEN 0 AND 7
-GROUP BY model, lead_day
+-- Illustrative DuckDB aggregation for global lead-day curves. The QoD >= 0.80 station-day gate is
+-- applied by joining the daily QoD table on (target date, device). The production bakers apply it via
+-- a QoD table that contains only station-days with qod_score >= 0.80; it is written explicitly here.
+SELECT
+    e.model,
+    datediff('day', cast(e.initialization_date as timestamp), cast(e.target_date as timestamp)) AS lead_day,
+    count(*) AS evaluated_records,   -- device x model x run x target date (published as "samples")
+    round(sum(e.daily_MAE * e.n_samples_MAE_RMSE) / sum(e.n_samples_MAE_RMSE), 3) AS pooled_mae,
+    round(sqrt(sum(e.daily_RMSE * e.daily_RMSE * e.n_samples_MAE_RMSE) / sum(e.n_samples_MAE_RMSE)), 3) AS pooled_rmse,
+    sum(e.n_samples_MAE_RMSE) AS total_hourly_pairs
+FROM read_parquet('data/2025_full/*/*.parquet', hive_partitioning = true) e   -- partition `date` = target date
+JOIN read_parquet('data/qod_daily/*.parquet') q
+  ON q.date = cast(e.date AS VARCHAR) AND q.device_id = e.device_id AND q.qod_score >= 0.80
+WHERE e.variable = 'temperature'
+  AND e.daily_MAE BETWEEN 0 AND 40.0
+  AND e.n_samples_MAE_RMSE >= 18
+  AND datediff('day', cast(e.initialization_date as timestamp), cast(e.target_date as timestamp)) BETWEEN 0 AND 7
+GROUP BY ALL
 HAVING count(*) > 50
 ORDER BY lead_day ASC, pooled_mae ASC;
 ```

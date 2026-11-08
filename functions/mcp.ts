@@ -92,9 +92,23 @@ function provenance(meta: any) {
     caveat: 'Historical skill, not a live forecast, guaranteed future accuracy, confidence interval or evidence that buying a station improves accuracy.'};
 }
 function modelInfo(meta: any, id: string) {
-  return {id, name: meta.model_names[id] || id, is_commissioned: meta.commissioned_models.includes(id)};
+  const stationInformed = meta.station_informed_models || ['MOSAIC', 'mLM'];
+  return {
+    id,
+    name: meta.model_names[id] || id,
+    is_commissioned: meta.commissioned_models.includes(id),
+    is_weatherxm_product: id === 'MOSAIC',
+    is_station_informed: stationInformed.includes(id)
+  };
 }
 const MATCH_MIN_COVERAGE = 0.9;
+const WIND_SPEED_METHODOLOGY = {
+  scaling_factor: 1.35135,
+  scaling_basis: 'Upstream evaluation multiplies hourly observed wind speed (magnitude of vector-averaged sub-hourly u/v) by 1.35135 before scoring; the code comment describes it as a 2 m to 10 m conversion sourced from meteoblue. Actual community mast heights and surroundings vary, so a single constant cannot correct every site and wind_speed errors include station-specific siting/exposure effects.',
+  observed_value_semantics: 'observed_value = daily mean of the already-scaled hourly observed wind speed (about 2.22 m/s raw-sensor equivalent at the 3.0 m/s threshold).',
+  default_basis: 'all_hours',
+  windier_days_subset_note: 'wind_speed_windier_days conditions on the observed outcome. It is not a height correction, exposure classifier, de-biasing step, proof of station quality or a preferred ranking.'
+};
 function result(meta: any, tuple: any, exclude: boolean, unit: string, variable = 'temperature', lead = 'all'): any {
   if (!tuple) return {status: 'NOT_PUBLISHED_AT_REQUESTED_LEAD', champion_model: null, station_count: null, low_confidence: null, top_non_commissioned_models: [], commissioned_evaluation: null};
   const id = meta.models[tuple[0]];
@@ -177,7 +191,7 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
     const commRunner = Boolean(hssRunner?.is_commissioned);
     const effectiveHssChamp = exclude && commChamp ? hssRunner : hssChamp;
     precipEventSkill = {
-      metric: 'Heidke Skill Score (HSS, >=0.2 mm/day rain-event detection; 1.0=perfect, 0=chance)',
+      metric: 'Heidke Skill Score (HSS, >=0.25 mm/day rain-event detection; 1.0=perfect, 0=chance)',
       horizon_lead_day: psRaw[7],
       ...(lead === 'all' ? {horizon_substitution_note: 'Pooled HSS is not baked; lead_day=1 HSS is shown.'} : {}),
       effective_hss_champion: effectiveHssChamp,
@@ -190,15 +204,15 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
       counts_basis: 'champion-model station-days (not matched across models)',
       note: 'For precipitation, categorical event-detection skill (HSS) is more informative than millimeter MAE, which is compressed by dry days and light-rain frequency bias. Prefer effective_hss_champion over MAE for rain-event decisions.'
     };
-  } else if (variable === 'wind_direction' && Array.isArray(psRaw) && psRaw.length > 0) {
+  } else if ((variable === 'wind_direction' || variable === 'wind_speed') && Array.isArray(psRaw) && psRaw.length > 0) {
+    const isDir = variable === 'wind_direction';
     const top3ms = psRaw.map((t: any, idx: number) => ({
       rank: idx + 1,
       ...modelInfo(meta, meta.models[t[0]]),
       mae: t[1],
       rmse: t[2],
-      circular_mae_deg: t[1],
-      circular_rmse_deg: t[2],
-      unit: '°',
+      ...(isDir ? {circular_mae_deg: t[1], circular_rmse_deg: t[2]} : {}),
+      unit: isDir ? '°' : 'm/s',
       station_count: t[3],
       station_days: t[4],
       hourly_samples: t[5]
@@ -207,19 +221,28 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
     const margin3ms = top3ms.length >= 2 ? Number((top3ms[1].mae - top3ms[0].mae).toFixed(2)) : null;
     const tied3ms = champ3ms ? top3ms.filter((t: any) => t.id !== champ3ms.id && t.mae === champ3ms.mae).map((t: any) => t.id) : [];
     windDirAbove3ms = {
-      subset: 'wind_direction_greater_than_3_m_s (hours where observed wind speed > 3 m/s, >= 3 windy hours/day)',
+      subset: isDir
+        ? 'wind_direction_greater_than_3_m_s (hours where raw sensor wind speed > 3 m/s, >= 3 windy hours/day)'
+        : 'wind_speed_windier_days (optional conditioned subset: station-days whose daily mean of hourly observed wind speed, already scaled x1.35135, is >= 3.0 m/s; >= 18 hourly pairs/day; QoD >= 0.80)',
       champion_non_commissioned_model: champ3ms,
       ...(tied3ms.length ? {champion_tied_with: tied3ms} : {}),
       top_non_commissioned_margin_mae: margin3ms,
       low_confidence: champ3ms ? (champ3ms.station_count < 3 || champ3ms.station_days < 60) : null,
-      low_confidence_basis: 'Heuristic: <3 stations or <60 station-days in the >3 m/s subset.',
+      low_confidence_basis: isDir ? 'Heuristic: <3 stations or <60 station-days in the >3 m/s subset.' : 'Heuristic: <3 distinct stations or <60 distinct station-days in the windier-days subset.',
+      counts_basis: isDir
+        ? 'station_count/station_days in this direction subset are the legacy bake values (cell-level station count; average per-lead station-days), not exact distinct counts for the subset.'
+        : 'station_count = distinct stations, station_days = distinct station x target-date pairs, hourly_samples = hourly forecast/observation pairs, all within this model and subset.',
       top_non_commissioned_models: top3ms,
-      note: 'Under calm/light winds (<=3 m/s), physical wind vanes wander randomly and NWP flow direction is weakly defined. Prefer wind_direction_above_3ms for active-wind operational decisions.'
+      top_third_party_models: top3ms.filter((t: any) => t.id !== 'MOSAIC'),
+      note: isDir
+        ? 'Under calm/light winds (<=3 m/s), physical wind vanes wander randomly and NWP flow direction is weakly defined. Prefer wind_direction_above_3ms for active-wind operational decisions.'
+        : 'Conditioned on the observed outcome (windier days). Not a height correction, not an exposure/siting classifier, not de-biasing and not a preferred ranking: models that under-forecast tend to look worse and models that over-forecast tend to look better on days selected by high observations. Use all-hours champion_model as the default wind_speed answer.'
     };
   }
   return {
     status,
     champion_model: champion,
+    ...(variable === 'wind_speed' ? {recommended_basis: 'all_hours'} : {}),
     ...(variable === 'wind_direction' ? {
       recommended_basis: windDirAbove3ms?.champion_non_commissioned_model ? 'wind_direction_above_3ms' : 'all_hours',
       preferred_operational_champion: windDirAbove3ms?.champion_non_commissioned_model ?? champion
@@ -233,16 +256,21 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
     models_competing: modelsCompeting,
     best_to_worst_model_mae_spread: spread,
     top_non_commissioned_models: topNonComm,
+    top_third_party_models: topNonComm.filter((t: any) => t.id !== 'MOSAIC'),
     ...(variable === 'precipitation' ? {precipitation_event_skill: precipEventSkill} : {}),
     ...(variable === 'wind_direction' ? {
       wind_direction_methodology: {
-        error_formula: 'Circular shortest-arc angular error Δθ = min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on hourly unit-vector averages (e.g., 359° vs 1° = 2° error, never 358°).',
+        error_formula: 'Circular shortest-arc angular error Δθ = min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on speed-weighted hourly vector averages (e.g., 359° vs 1° = 2° error, never 358°).',
         rmse_definition: 'Root mean square of the hourly circular shortest-arc errors sqrt((1/n) * sum(Δθ_h^2)).',
-        convention: 'Meteorological wind-from bearing in degrees clockwise from true north (0°/360°=N, 90°=E, 180°=S, 270°=W). Hourly observation is the unit-vector average atan2(mean(sin θ), mean(cos θ)); zero-speed calm intervals have undefined direction.',
+        convention: 'Meteorological wind-from bearing in degrees clockwise from true north (0°/360°=N, 90°=E, 180°=S, 270°=W). Hourly direction is from vector-averaged sub-hourly u/v components; the constant x1.35135 speed factor does not change computed angles, but physical siting (mast height, obstacles) still affects measured direction.',
         random_baseline_deg: 90.0,
-        calm_wind_caveat: 'Uniform random direction error averages 90.0° MAE. Primary cell/leaderboard MAE covers all valid hours (>=18h/day), which includes light winds (<=3 m/s) where physical wind vanes wander randomly (~50°–65° MAE). Prefer preferred_operational_champion / wind_direction_above_3ms (>3 m/s active-wind hours) for operational wind decisions.'
+        calm_wind_caveat: 'Uniform random direction error averages 90.0° MAE. Primary cell/leaderboard MAE covers all valid hours (>=18h/day), which includes light winds (<=3 m/s) where physical wind vanes wander randomly (~50°–65° MAE). Prefer preferred_operational_champion / wind_direction_above_3ms (>3 m/s raw sensor wind speed) for operational wind decisions.'
       },
       wind_direction_above_3ms: windDirAbove3ms
+    } : {}),
+    ...(variable === 'wind_speed' ? {
+      wind_speed_methodology: WIND_SPEED_METHODOLOGY,
+      wind_speed_windier_days: windDirAbove3ms
     } : {}),
     commissioned_evaluation: exclude ? null : commEval,
     ...(exclude && commEval ? {commissioned_evaluation_withheld: true} : {}),
@@ -557,34 +585,71 @@ export async function handleGetFactLeaderboard(env: PagesEnv, url: string, args:
   }
   check(lead !== 'all', 'Global curves require a specific lead_day (0..7); pooled all is not baked');
   const curves = lb.global_curves[variable].curves;
-  const rows = Object.entries<any>(curves).filter(([id,c]) => c[lead] && (!exclude || !meta.commissioned_models.includes(id)))
-    .map(([id,c]) => ({...modelInfo(meta,id), ...c[lead], sample_count_basis: 'source curves.samples counts station/model/target/run daily evaluation records, not unique stations or hourly pairs'}))
-    .sort((a,b) => a.mae-b.mae);
+  const allCurveRows = Object.entries<any>(curves)
+    .filter(([id,c]) => c[lead] && (!exclude || !meta.commissioned_models.includes(id)))
+    .map(([id,c]) => ({...modelInfo(meta,id), ...c[lead], sample_count_basis: 'source curves.samples counts station/model/target/run daily evaluation records, not unique stations or hourly pairs'}));
+  const maxSamples = Math.max(1, ...allCurveRows.map(r => r.samples || 0));
+  const broadThreshold = Math.ceil(0.6 * maxSamples);
+  const annotatedRows = allCurveRows
+    .map(r => ({...r, coverage_share_of_max_samples: Number((r.samples / maxSamples).toFixed(3)), broad_sample_coverage: r.samples >= broadThreshold}))
+    .sort((a,b) => a.mae - b.mae || a.id.localeCompare(b.id));
+  const broadRows = annotatedRows.filter(r => r.broad_sample_coverage);
+  const limitedRows = annotatedRows.filter(r => !r.broad_sample_coverage);
+
   const precipAll = variable === 'precipitation'
     ? Object.entries<any>(lb.precip_skill.all)
         .filter(([id,c]) => c[lead] && (!exclude || !meta.commissioned_models.includes(id)))
         .map(([id,c]) => ({...modelInfo(meta,id), ...c[lead]}))
         .sort((a,b) => (b.hss ?? -Infinity) - (a.hss ?? -Infinity) || a.id.localeCompare(b.id))
     : [];
-  const wind3msCurves = variable === 'wind_direction' ? (lb.global_curves[variable]?.curves_above_3ms ?? {}) : {};
-  const wind3msAll = variable === 'wind_direction'
+  const wind3msCurves = (variable === 'wind_direction' || variable === 'wind_speed') ? (lb.global_curves[variable]?.curves_above_3ms ?? {}) : {};
+  const wind3msRaw = (variable === 'wind_direction' || variable === 'wind_speed')
     ? Object.entries<any>(wind3msCurves)
         .filter(([id,c]) => c[lead] && (!exclude || !meta.commissioned_models.includes(id)))
-        .map(([id,c]) => ({...modelInfo(meta,id), ...c[lead], unit: '°', sample_count_basis: 'station-days with >=3 hours of observed wind speed > 3 m/s'}))
-        .sort((a,b) => a.mae - b.mae || a.id.localeCompare(b.id))
+        .map(([id,c]) => ({
+          ...modelInfo(meta,id),
+          ...c[lead],
+          unit: variable === 'wind_direction' ? '°' : 'm/s',
+          sample_count_basis: variable === 'wind_direction'
+            ? 'station-days with >=3 hours of raw sensor wind speed > 3 m/s'
+            : 'evaluated records on windier station-days (scaled daily-mean observed wind speed >= 3.0 m/s)'
+        }))
     : [];
+  const max3msSamples = Math.max(1, ...wind3msRaw.map(r => r.samples || 0));
+  const wind3msAll = wind3msRaw
+    .map(r => ({...r, coverage_share_of_max_samples: Number((r.samples / max3msSamples).toFixed(3)), broad_sample_coverage: r.samples >= Math.ceil(0.6 * max3msSamples)}))
+    .sort((a,b) => a.mae - b.mae || a.id.localeCompare(b.id));
+
   return {provenance: prov, variable, lead_day: lead,
-    total_models_evaluated: rows.length,
-    returned_models_count: Math.min(rows.length, limit),
-    leaderboard: rows.slice(0, limit),
-    comparability_note: 'Models have different sample cohorts. Filtering mLM does not create matched station/time cohorts. MAE and RMSE are historical errors, not confidence intervals.',
+    total_models_evaluated: annotatedRows.length,
+    returned_models_count: Math.min(annotatedRows.length, limit),
+    leaderboard: annotatedRows.slice(0, limit),
+    coverage_split: {
+      rule: 'Coverage proxy only: broad = evaluated-record count >= 60% of the largest model count at this lead_day. This is NOT a matched cohort and NOT proof of a model domain; limited coverage can mean a regional domain, a later start, missing runs or restricted/commissioned coverage (e.g. mLM).',
+      min_records_for_broad: broadThreshold,
+      broad_coverage_models: broadRows.slice(0, limit),
+      limited_coverage_models: limitedRows.slice(0, limit)
+    },
+    comparability_note: 'Models have different sample cohorts. Filtering mLM does not create matched station/time cohorts. MAE and RMSE are historical errors, not confidence intervals. MOSAIC (WeatherXM product) and mLM (commissioned) are station-informed (is_station_informed=true); Use is_station_informed to filter them client-side; get_best_forecast_model also returns top_third_party_models (excludes MOSAIC; mLM is already excluded as commissioned).',
     ...(variable === 'wind_direction' ? {
       wind_direction_methodology: {
-        error_formula: 'Circular shortest-arc angular error min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on hourly unit-vector averages (e.g., 359° vs 1° = 2° error, never 358°).',
-        subset_comparison_note: 'leaderboard covers all valid hours (>=18h/day); wind_direction_above_3ms filters to hours with observed wind speed > 3 m/s (>=3 windy hours/day) to eliminate calm-wind vane wander.'
+        error_formula: 'Circular shortest-arc angular error Δθ = min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on speed-weighted hourly vector averages (e.g., 359° vs 1° = 2° error, never 358°).',
+        convention: 'Meteorological wind-from bearing clockwise from true north. The constant x1.35135 speed factor does not change computed angles; physical siting still affects measured direction.',
+        subset_comparison_note: 'leaderboard covers all valid hours (>=18h/day); wind_direction_above_3ms filters to hours with raw sensor wind speed > 3 m/s (>=3 windy hours/day) to eliminate calm-wind vane wander.'
       },
       wind_direction_above_3ms: {
-        threshold: '>3 m/s observed wind speed (>=3 valid windy hours/day)',
+        threshold: '>3 m/s raw sensor wind speed (>=3 valid windy hours/day)',
+        total_models_evaluated: wind3msAll.length,
+        returned_models_count: Math.min(wind3msAll.length, limit),
+        leaderboard: wind3msAll.slice(0, limit)
+      }
+    } : {}),
+    ...(variable === 'wind_speed' ? {
+      wind_speed_methodology: WIND_SPEED_METHODOLOGY,
+      wind_speed_windier_days: {
+        subset: 'optional conditioned subset; default leaderboard above remains all-hours',
+        threshold: 'daily mean of hourly observed wind speed (already scaled x1.35135) >= 3.0 m/s; >= 18 hourly pairs; QoD >= 0.80',
+        samples_basis: 'samples = evaluated records; station_days = distinct station x target date; stations = distinct stations; hourly_pairs = hourly forecast/observation pairs',
         total_models_evaluated: wind3msAll.length,
         returned_models_count: Math.min(wind3msAll.length, limit),
         leaderboard: wind3msAll.slice(0, limit)
@@ -673,9 +738,13 @@ export async function handleGetModelHeadToHead(env: PagesEnv, url: string, args:
         ...(variable === 'wind_direction' && cellRes.wind_direction_above_3ms ? {
           in_top_above_3ms_non_commissioned: (cellRes.wind_direction_above_3ms.top_non_commissioned_models || []).find((m: any) => m.id === id) ?? null
         } : {}),
+        ...(variable === 'wind_speed' && cellRes.wind_speed_windier_days ? {
+          in_top_windier_days_non_commissioned: (cellRes.wind_speed_windier_days.top_non_commissioned_models || []).find((m: any) => m.id === id) ?? null
+        } : {}),
         in_commissioned_matched_cohort: exclude ? null : (matchedById.get(id) ?? (cellRes.commissioned_evaluation?.commissioned_model?.id === id ? cellRes.commissioned_evaluation.commissioned_model : null))
       })),
       ...(variable === 'wind_direction' && cellRes.wind_direction_above_3ms ? {wind_direction_above_3ms: cellRes.wind_direction_above_3ms} : {}),
+      ...(variable === 'wind_speed' && cellRes.wind_speed_windier_days ? {wind_speed_windier_days: cellRes.wind_speed_windier_days} : {}),
       note: cellRes.status === 'NOT_PUBLISHED_AT_REQUESTED_LEAD'
         ? 'No published historical evaluation is baked for this H3 cell at the requested lead_day; requested model entries are null because the cell itself has no published slice.'
         : 'Cell slices bake the cell champion, top-5 non-commissioned models, and (where mLM is active) top matched-cohort models covering >=90% of mLM station-days. A null entry means the model did not place in that baked cell top-5 slice, not that it was unmeasured.'
@@ -705,6 +774,7 @@ export async function handleGetModelHeadToHead(env: PagesEnv, url: string, args:
   }
 
   const curves3ms = variable === 'wind_direction' ? (lb.global_curves[variable]?.curves_above_3ms ?? {}) : null;
+  const curvesWindier = variable === 'wind_speed' ? (lb.global_curves[variable]?.curves_above_3ms ?? {}) : null;
   const countryCoordMismatch = Boolean(cellCountryName && countryComparison?.country && cellCountryName !== countryComparison.country);
   const commLinks = links(hasLat ? args.lat : undefined, hasLon ? args.lon : undefined, cellIdForLink, variable, lead);
   const hasLocalOrCountry = Boolean(localCellComparison || countryComparison);
@@ -718,6 +788,7 @@ export async function handleGetModelHeadToHead(env: PagesEnv, url: string, args:
         calm_wind_caveat: 'lead_days covers all valid hours (>=18h/day); lead_days_above_3ms filters to hours with observed wind speed > 3 m/s (>=3 windy hours/day) to eliminate calm-wind vane wander.'
       }
     } : {}),
+    ...(variable === 'wind_speed' ? {wind_speed_methodology: WIND_SPEED_METHODOLOGY} : {}),
     ...(args.lead_day !== undefined ? {lead_day: lead} : {}),
     ...(args.exclude_commissioned !== undefined ? {exclude_commissioned: exclude} : {}),
     ...(exclude && filteredIds.length === 0 ? {commissioned_models_excluded_warning: 'All requested models were station-commissioned and excluded by exclude_commissioned=true.'} : {}),
@@ -737,7 +808,9 @@ export async function handleGetModelHeadToHead(env: PagesEnv, url: string, args:
         ...(args.lead_day !== undefined && lead !== 'all' ? {requested_lead_day_metrics: curves[id]?.[lead] ?? null} : {}),
         ...(curves3ms && args.lead_day !== undefined && lead !== 'all' ? {requested_lead_day_above_3ms_metrics: curves3ms[id]?.[lead] ?? null} : {}),
         lead_days: hasAnyCurve ? curves[id] : null,
-        ...(curves3ms ? {lead_days_above_3ms: curves3ms[id] && Object.keys(curves3ms[id]).length > 0 ? curves3ms[id] : null} : {})
+        ...(curves3ms ? {lead_days_above_3ms: curves3ms[id] && Object.keys(curves3ms[id]).length > 0 ? curves3ms[id] : null} : {}),
+        ...(curvesWindier && args.lead_day !== undefined && lead !== 'all' ? {requested_lead_day_windier_days_metrics: curvesWindier[id]?.[lead] ?? null} : {}),
+        ...(curvesWindier ? {lead_days_windier_days: curvesWindier[id] && Object.keys(curvesWindier[id]).length > 0 ? curvesWindier[id] : null} : {})
       };
     }),
     ...(localCellComparison ? {local_cell_comparison: localCellComparison} : {}),
@@ -750,9 +823,21 @@ const geo = {lat: {type:'number',minimum:-90,maximum:90},lon:{type:'number',mini
 const common = {variable:{type:'string',enum:VARIABLES,default:'temperature'},lead_day:{type:'string',enum:LEADS},exclude_commissioned:{type:'boolean',default:false}};
 const stationOrReportProp = {station_or_report_id:{type:'string',maxLength:80,description:'Optional WeatherXM station UUID or custom site evaluation report ID (e.g. STUDY-...)'}};
 const annotations = {readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false};
-const ALL_45_MODELS_TEXT = 'All 45 FACT models: WeatherXM MOSAIC (MOSAIC), meteoblue (METEOBLUE), meteoblue station-mLM (mLM), ECMWF IFS (IFS025, IFSHRES), ECMWF AIFS AI (AIFS025), NOAA GFS (GFS05, GFS025), NOAA HRRR (HRRR), NOAA National Blend of Models (NBM), NOAA NAM (NAM3, NAM5, NAM12, NAMAK), DWD ICON (ICON, ICONEU, ICOND2), UK Met Office (UMGLOBAL10, UKMO2), ECCC GEM (GEM15, GEM2), Meteo-France ARPEGE/AROME (MFGLOBAL, MFEU, MFFR), COSMO (COSMOI2, COSMOM5), HARMONIE-AROME (HARMONIE), JMA MSM (MSM), WRF (WRFGR, WRFAMS), meteoblue NEMS/NMM (NEMSGLOBAL, NEMSGLOBAL_E, NEMS4, NEMS12, NEMS12_E, NEMSAF01, NEMSAS02, NEMSCAM, NEMSIN, NEMSNZ, NEMSSA, NMM4, NMM22), and regional models (AF01, AS01, SA01).';
+export const MODEL_CATALOGUE: Array<[string, string[]]> = [
+  ['WeatherXM MOSAIC', ['MOSAIC']], ['meteoblue', ['METEOBLUE']], ['meteoblue station-mLM (commissioned)', ['mLM']],
+  ['ECMWF IFS', ['IFS025', 'IFSHRES']], ['ECMWF AIFS AI', ['AIFS025']], ['NOAA GFS 0.5°', ['GFS05']], ['NOAA HRRR', ['HRRR']],
+  ['NOAA National Blend of Models', ['NBM']], ['NOAA NAM', ['NAM3', 'NAM5', 'NAM12', 'NAMAK']], ['DWD ICON', ['ICON', 'ICONEU', 'ICOND2']],
+  ['UK Met Office', ['UMGLOBAL10', 'UKMO2']], ['ECCC GEM', ['GEM15', 'GEM2']], ['Meteo-France ARPEGE/AROME', ['MFGLOBAL', 'MFEU', 'MFFR']],
+  ['COSMO', ['COSMOI2', 'COSMOM5']], ['HARMONIE-AROME', ['HARMONIE']], ['JMA MSM', ['MSM']], ['WRF', ['WRFGR', 'WRFAMS']],
+  ['meteoblue NEMS/NMM', ['NEMSGLOBAL', 'NEMSGLOBAL_E', 'NEMS4', 'NEMS12', 'NEMS12_E', 'NEMSAF01', 'NEMSAS02', 'NEMSCAM', 'NEMSIN', 'NEMSNZ', 'NEMSSA', 'NMM4', 'NMM22']],
+  ['regional models', ['AF01', 'AS01', 'SA01']]
+];
+export const CATALOGUE_MODEL_IDS = MODEL_CATALOGUE.flatMap(([, ids]) => ids);
+const ALL_45_MODELS_TEXT = `All ${CATALOGUE_MODEL_IDS.length} FACT models (2025 archive, 2025-02-13 to 2025-12-31, QoD >= 0.80 station-days): ` +
+  MODEL_CATALOGUE.map(([n, ids]) => `${n} (${ids.join(', ')})`).join(', ') +
+  '. GFS025 is not archived; requests for it resolve to GFS05 with a resolution warning.';
 export const MCP_TOOLS = [
-  {name:'get_best_forecast_model',description:'Find which weather forecast model had the lowest verified historical error (MAE) for a latitude/longitude coordinate (or station_or_report_id), weather variable (temperature, wind_speed, wind_direction, precipitation, humidity), and forecast horizon (Days 0-7). For wind_direction, errors are circular shortest-arc angular errors (0°–180°, where 359° vs 1° = 2° error) on hourly unit-vector averages, returning both all-hours and >3 m/s active-wind rankings. ' + ALL_45_MODELS_TEXT + ' Useful for solar & wind energy forecasting, agriculture & frost/irrigation risk, maritime/port & drone operations, construction planning, and microclimate evaluation. Provide (lat, lon) or station_or_report_id. Missing results stay unknown; not live forecasting.',annotations:{...annotations,title:'Get Best Weather Forecast Model'},inputSchema:{type:'object',properties:{...geo,...common,...stationOrReportProp},additionalProperties:false}},
+  {name:'get_best_forecast_model',description:'Find which weather forecast model had the lowest verified historical error (MAE) for a latitude/longitude coordinate (or station_or_report_id), weather variable (temperature, wind_speed, wind_direction, precipitation, humidity), and forecast horizon (Days 0-7). For wind_direction, errors are circular shortest-arc angular errors (0°–180°, where 359° vs 1° = 2° error) on hourly unit-vector averages, returning both all-hours and >3 m/s active-wind rankings. For wind_speed the default is all hours; an optional conditioned windier-days subset (daily mean scaled observed speed >= 3 m/s) is returned separately and is not a height correction. ' + ALL_45_MODELS_TEXT + ' Useful for solar & wind energy forecasting, agriculture & frost/irrigation risk, maritime/port & drone operations, construction planning, and microclimate evaluation. Provide (lat, lon) or station_or_report_id. Missing results stay unknown; not live forecasting.',annotations:{...annotations,title:'Get Best Weather Forecast Model'},inputSchema:{type:'object',properties:{...geo,...common,...stationOrReportProp},additionalProperties:false}},
   {name:'check_ground_truth_coverage',description:'Check historical WeatherXM FACT ground-station publication coverage for any coordinate (H3 Res-7 cell, ~5.2 km²) or station_or_report_id across temperature, wind_speed, wind_direction, precipitation, and humidity, plus nearest evaluated reference cell distance and interactive map citation link. Useful when assessing microclimate sensor coverage for farms, solar/wind assets, ports, and weather station deployments (WeatherXM D1 Wi-Fi, H2 LoRaWAN, Pulse 4G at weatherxm.com/stations). Provide (lat, lon) or station_or_report_id. Does not establish current live station presence or absence.',annotations:{...annotations,title:'Check Ground-Truth Station Coverage'},inputSchema:{type:'object',properties:{...geo,...common,...stationOrReportProp},additionalProperties:false}},
   {name:'get_fact_leaderboard',description:'Read the global weather forecast accuracy leaderboard (MAE, RMSE, circular angular error for wind_direction including >3 m/s active-wind curves, and categorical rain skill HSS, POD, FAR, CSI across lead days 0..7) or country-level published H3 cell-win summaries across all 45 forecast models and 8,927 stations. ' + ALL_45_MODELS_TEXT + ' Country counts describe published cell wins, not national matched-sample accuracy.',annotations:{...annotations,title:'Get Forecast Accuracy Leaderboard'},inputSchema:{type:'object',properties:{...common,country:{type:'string',maxLength:80},limit:{type:'integer',minimum:1,maximum:45,default:45,description:'Maximum number of ranked models to return (1..45, default 45 for full model universe).'}},additionalProperties:false}},
   {name:'get_model_head_to_head',description:'Compare up to 10 weather forecast models head-to-head across lead days 0 to 7 on global historical error curves (including circular angular error and >3 m/s active-wind curves for wind_direction), plus optional local H3 cell (lat/lon) matched-cohort or country cell-win comparisons, with explicit cohort and station-commissioned (mLM) caveats. ' + ALL_45_MODELS_TEXT,annotations:{...annotations,title:'Compare Forecast Models Head-to-Head'},inputSchema:{type:'object',properties:{...geo,...common,country:{type:'string',maxLength:80},models:{type:'array',items:{type:'string',maxLength:40},minItems:1,maxItems:10}},additionalProperties:false}}
@@ -832,7 +917,7 @@ function renderMcpLandingHtml(): string {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WeatherXM FACT · Model Context Protocol (MCP) Connector</title>
-  <meta name="description" content="Public Streamable HTTP MCP server for WeatherXM FACT (Forecast Accuracy Tracking). Connect ChatGPT, Claude, Gemini, Cursor, or any AI agent to benchmark 45 weather forecast models against 10,000+ physical ground stations." />
+  <meta name="description" content="Public Streamable HTTP MCP server for WeatherXM FACT (Forecast Accuracy Tracking). Connect ChatGPT, Claude, Gemini, Cursor, or any AI agent to benchmark 45 weather forecast models against 8,927 physical ground stations." />
   <meta name="mcp-server" content="https://fact.weatherxm.com/mcp" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
   <link rel="llms-txt" href="/llms.txt" type="text/plain" />
@@ -847,7 +932,7 @@ function renderMcpLandingHtml(): string {
         "@id": "https://fact.weatherxm.com/#dataset",
         "name": "WeatherXM FACT — Global Weather Forecast Accuracy Verification Benchmark (45 NWP & AI Models Across 8,927 Ground Stations)",
         "url": "https://fact.weatherxm.com/",
-        "sameAs": ["https://github.com/WeatherXM/FACT", "https://fact.weatherxm.com/mcp"],
+        "sameAs": ["https://github.com/WeatherXM/weatherxm-fact-mcp", "https://fact.weatherxm.com/mcp"],
         "version": "2.1.0",
         "isAccessibleForFree": true,
         "license": "https://weatherxm.com/terms-and-conditions/",
@@ -984,7 +1069,7 @@ function renderMcpLandingHtml(): string {
         You have opened the <strong>WeatherXM FACT Model Context Protocol (MCP)</strong> endpoint in a web browser.
         AI assistants and agents (<strong>ChatGPT, Claude, Gemini, Cursor, Claude Code, OpenClaw</strong>) connect to this URL via
         <strong>Streamable HTTP (<code>POST https://fact.weatherxm.com/mcp</code>)</strong> to query empirical weather forecast accuracy across
-        <strong>45 weather models</strong> and <strong>10,000+ physical ground stations</strong> (1.83B+ forecast evaluations).
+        <strong>45 weather models</strong> and <strong>8,927 quality-checked ground stations</strong> (1.83B+ forecast evaluations).
       </p>
       <div class="endpoint-bar">
         <div>
@@ -1006,7 +1091,7 @@ function renderMcpLandingHtml(): string {
         </div>
         <button class="btn" onclick="copyText(document.getElementById('agentPrompt').innerText, this)">Copy Instructions for Agent</button>
       </div>
-      <pre id="agentPrompt">You have access to WeatherXM FACT (Forecast Accuracy Tracking), which benchmarks 45 global and regional weather forecast models (ECMWF, GFS, ICON, meteoblue, meteoblue mLM, WeatherXM MOSAIC, etc.) against 10,000+ physical ground stations.
+      <pre id="agentPrompt">You have access to WeatherXM FACT (Forecast Accuracy Tracking), which benchmarks 45 global and regional weather forecast models (ECMWF, GFS, ICON, meteoblue, meteoblue mLM, WeatherXM MOSAIC, etc.) against 8,927 quality-checked physical ground stations.
 - If you support MCP (Model Context Protocol), connect to the unauthenticated Streamable HTTP MCP server at: https://fact.weatherxm.com/mcp
 - Full LLM &amp; agent reference: https://fact.weatherxm.com/llms.txt
 - If you can fetch URLs or call HTTP GET endpoints, use the unauthenticated JSON REST API:
