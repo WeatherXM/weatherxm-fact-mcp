@@ -194,6 +194,8 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
     const top3ms = psRaw.map((t: any, idx: number) => ({
       rank: idx + 1,
       ...modelInfo(meta, meta.models[t[0]]),
+      mae: t[1],
+      rmse: t[2],
       circular_mae_deg: t[1],
       circular_rmse_deg: t[2],
       unit: '°',
@@ -201,9 +203,16 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
       station_days: t[4],
       hourly_samples: t[5]
     }));
+    const champ3ms = top3ms[0] ?? null;
+    const margin3ms = top3ms.length >= 2 ? Number((top3ms[1].mae - top3ms[0].mae).toFixed(2)) : null;
+    const tied3ms = champ3ms ? top3ms.filter((t: any) => t.id !== champ3ms.id && t.mae === champ3ms.mae).map((t: any) => t.id) : [];
     windDirAbove3ms = {
       subset: 'wind_direction_greater_than_3_m_s (hours where observed wind speed > 3 m/s, >= 3 windy hours/day)',
-      champion_non_commissioned_model: top3ms[0] ?? null,
+      champion_non_commissioned_model: champ3ms,
+      ...(tied3ms.length ? {champion_tied_with: tied3ms} : {}),
+      top_non_commissioned_margin_mae: margin3ms,
+      low_confidence: champ3ms ? (champ3ms.station_count < 3 || champ3ms.station_days < 60) : null,
+      low_confidence_basis: 'Heuristic: <3 stations or <60 station-days in the >3 m/s subset.',
       top_non_commissioned_models: top3ms,
       note: 'Under calm/light winds (<=3 m/s), physical wind vanes wander randomly and NWP flow direction is weakly defined. Prefer wind_direction_above_3ms for active-wind operational decisions.'
     };
@@ -211,6 +220,10 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
   return {
     status,
     champion_model: champion,
+    ...(variable === 'wind_direction' ? {
+      recommended_basis: windDirAbove3ms?.champion_non_commissioned_model ? 'wind_direction_above_3ms' : 'all_hours',
+      preferred_operational_champion: windDirAbove3ms?.champion_non_commissioned_model ?? champion
+    } : {}),
     ...(tiedWith.length ? {champion_tied_with: tiedWith} : {}),
     top_non_commissioned_margin_mae: topMargin,
     station_count: sc,
@@ -223,8 +236,11 @@ function result(meta: any, tuple: any, exclude: boolean, unit: string, variable 
     ...(variable === 'precipitation' ? {precipitation_event_skill: precipEventSkill} : {}),
     ...(variable === 'wind_direction' ? {
       wind_direction_methodology: {
-        error_formula: 'Circular shortest-arc angular error min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on hourly unit-vector averages (e.g., 359° vs 1° = 2° error, never 358°).',
-        calm_wind_caveat: 'Primary cell/leaderboard MAE covers all valid hours (>=18h/day), which includes light winds (<=3 m/s) where physical wind vanes wander. See wind_direction_above_3ms for active-wind (>3 m/s) circular error.'
+        error_formula: 'Circular shortest-arc angular error Δθ = min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on hourly unit-vector averages (e.g., 359° vs 1° = 2° error, never 358°).',
+        rmse_definition: 'Root mean square of the hourly circular shortest-arc errors sqrt((1/n) * sum(Δθ_h^2)).',
+        convention: 'Meteorological wind-from bearing in degrees clockwise from true north (0°/360°=N, 90°=E, 180°=S, 270°=W). Hourly observation is the unit-vector average atan2(mean(sin θ), mean(cos θ)); zero-speed calm intervals have undefined direction.',
+        random_baseline_deg: 90.0,
+        calm_wind_caveat: 'Uniform random direction error averages 90.0° MAE. Primary cell/leaderboard MAE covers all valid hours (>=18h/day), which includes light winds (<=3 m/s) where physical wind vanes wander randomly (~50°–65° MAE). Prefer preferred_operational_champion / wind_direction_above_3ms (>3 m/s active-wind hours) for operational wind decisions.'
       },
       wind_direction_above_3ms: windDirAbove3ms
     } : {}),
