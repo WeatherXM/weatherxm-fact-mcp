@@ -1,0 +1,37 @@
+{
+  "name": "@weatherxm/fact-mcp",
+  "version": "2.1.0",
+  "description": "WeatherXM FACT (Forecast Accuracy Tracking) \u2014 Methodology, Verification Pipeline & Model Context Protocol (MCP) Server scoring 45 NWP & AI weather models against 8,927 physical ground stations.",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/index.mjs",
+  "bin": {
+    "weatherxm-fact-mcp": "./src/index.mjs"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node examples/test_stdio_and_scoring.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WeatherXM/weatherxm-fact-mcp.git"
+  },
+  "homepage": "https://fact.weatherxm.com",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "weather",
+    "forecast-verification",
+    "meteorology",
+    "nwp",
+    "ecmwf",
+    "gfs",
+    "icon",
+    "meteoblue",
+    "weatherxm",
+    "h3"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
