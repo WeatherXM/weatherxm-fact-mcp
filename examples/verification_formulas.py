@@ -36,6 +36,7 @@ class StationDayRecord:
 PLAU_LIMITS = {
     "temperature": 40.0,   # °C
     "wind_speed": 30.0,    # m/s
+    "wind_direction": 180.0, # ° (circular shortest-arc error)
     "precipitation": 50.0, # mm
     "humidity": 100.0,     # %
 }

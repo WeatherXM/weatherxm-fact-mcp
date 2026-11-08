@@ -1080,7 +1080,7 @@ function renderMcpLandingHtml(): string {
       <h2>Exposed MCP Tools (4 Read-Only Tools)</h2>
       <div class="tool-item">
         <h3><code>get_best_forecast_model</code> — Get Best Weather Forecast Model</h3>
-        <p style="font-size: 13.5px; margin-bottom: 0;">Finds which weather forecast model had the lowest verified historical error (MAE) for a <code>(lat, lon)</code> coordinate (or <code>station_or_report_id</code>), weather variable (<code>temperature</code>, <code>wind_speed</code>, <code>precipitation</code>, <code>humidity</code>), and forecast horizon (Days <code>0..7</code> or <code>all</code>).</p>
+        <p style="font-size: 13.5px; margin-bottom: 0;">Finds which weather forecast model had the lowest verified historical error (MAE) for a <code>(lat, lon)</code> coordinate (or <code>station_or_report_id</code>), weather variable (<code>temperature</code>, <code>wind_speed</code>, <code>wind_direction</code> [circular shortest-arc error in 0°–180° + &gt;3 m/s active-wind rankings], <code>precipitation</code>, <code>humidity</code>), and forecast horizon (Days <code>0..7</code> or <code>all</code>).</p>
       </div>
       <div class="tool-item">
         <h3><code>check_ground_truth_coverage</code> — Check Ground-Truth Station Coverage</h3>

@@ -94,7 +94,7 @@ Raw measurements are turned into hourly values that match what the forecast repr
 | Temperature (°C) | 1-minute mean nearest to the top of the hour, within ±10 minutes | 2 m temperature at that hour |
 | Relative humidity (%) | Same as temperature | 2 m relative humidity at that hour |
 | Wind speed (m/s) | Vector average of the hour's measurements, then scaled from sensor height to 10 m with a fixed factor (×1.35) | 10 m wind speed |
-| Wind direction (°) | Vector average of the hour; also a second series using only measurements above 3 m/s | 10 m wind direction |
+| Wind direction (`wind_direction`, °) | Unit-vector average `atan2(mean(sin θ), mean(cos θ))` of the hour's compass bearings (meteorological "wind from", clockwise from true north; zero-speed calm intervals excluded); plus an active-wind series (`wind_direction_greater_than_3_m_s` / `wind_direction_above_3ms`) using only hours with observed wind speed > 3 m/s | 10 m wind direction |
 | Precipitation (mm) | Hourly difference of the cumulative rain counter, negative glitches set to zero | Hourly precipitation |
 | Daily precipitation (mm) | Difference of the rain counter across the UTC day | Sum of 24 hourly forecast values |
 | Pressure (hPa) | Station pressure reduced to mean sea level using the station's altitude and temperature | Mean sea-level pressure |
@@ -120,8 +120,9 @@ that day where both exist (*n* ≤ 24):
 
 - **MAE** = (1/*n*) Σ |*f<sub>h</sub>* − *o<sub>h</sub>*|
 - **RMSE** = √[(1/*n*) Σ (*f<sub>h</sub>* − *o<sub>h</sub>*)²]
-- **Wind direction** uses the smallest angle between forecast and observed direction
-  (so 350° vs 10° is a 20° error, not 340°).
+- **Wind direction (`wind_direction`)** uses the circular shortest-arc angular error between forecast and observed bearing:
+  Δθ<sub>h</sub> = min(|*f<sub>h</sub>* − *o<sub>h</sub>*| mod 360°, 360° − (|*f<sub>h</sub>* − *o<sub>h</sub>*| mod 360°)) ∈ [0°, 180°]
+  (so 350° vs 10° is a 20° error, never 340°). Daily directional MAE is (1/*n*) Σ Δθ<sub>h</sub> and daily directional RMSE is √[(1/*n*) Σ Δθ<sub>h</sub>²]. Uniformly random directional guesses average **90.0° MAE** (103.9° RMSE). Because physical wind vanes wander randomly during calm or light winds (≤ 3 m/s), FACT exposes both the all-hours series (`wind_direction`, *n* ≥ 18 h/day) and the active-wind series (`wind_direction_above_3ms`, hours with observed wind speed > 3 m/s, ≥ 3 windy hours/day), marking the > 3 m/s winner as the `preferred_operational_champion`.
 
 Each record keeps its sample count *n*, so it can be weighted correctly later. One record is one
 model, one run, one variable, one station, one target day. The 2025 archive holds 1.83 billion of them.
@@ -136,8 +137,9 @@ correct negative (*d*). From these counts, the Heidke Skill Score is
 HSS = 2(*ad* − *bc*) / [(*a* + *c*)(*c* + *d*) + (*a* + *b*)(*b* + *d*)]
 
 where 1 is perfect, 0 is no better than chance and negative values are worse than chance. In this
-release HSS drives model selection inside WeatherXM MOSAIC. The public views still show MAE and RMSE for
-precipitation; event-based views are on the roadmap (Section 9).
+release HSS drives model selection inside WeatherXM MOSAIC, and both the interactive web dashboard and
+the MCP/REST API expose full categorical precipitation skill (`HSS`, `ETS`, `POD`, `FAR`, `CSI`, and
+frequency bias) alongside millimetre MAE and RMSE.
 
 ### 3.3 Lead time
 
@@ -162,11 +164,12 @@ before any average is computed:
 1. **Quality of Data (QoD) gate.** Only station-days with a daily QoD score of at least 0.8 are scored.
    QoD is WeatherXM's own quality system, run every day on every station (summarised in Section 4.1).
 2. **Minimum hourly support.** A station-day counts only if at least 18 of its 24 hours (75%) produced a
-   valid pair for that model and variable.
+   valid pair for that model and variable (for the active-wind `wind_direction_greater_than_3_m_s` subset,
+   at least 3 valid hours with observed wind speed > 3 m/s are required).
 3. **Gross-error screen.** Station-days whose daily MAE exceeds a physical plausibility limit
-   (40 °C for temperature, 30 m/s for wind speed, 50 mm for precipitation, 100% for humidity) are
-   discarded as data faults. These limits are deliberately loose: they catch broken records, not bad
-   forecasts.
+   (40 °C for temperature, 30 m/s for wind speed, 180° for wind direction, 50 mm for precipitation,
+   100% for humidity) are discarded as data faults. These limits are deliberately loose: they catch
+   broken records, not bad forecasts.
 
 The same rules apply to every model. The QoD gate removes a station-day for all models at once; the
 hourly-support and gross-error rules are applied to each model's record separately, so a model with
