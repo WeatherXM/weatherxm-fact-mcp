@@ -105,7 +105,7 @@ const MATCH_MIN_COVERAGE = 0.9;
 const WIND_SPEED_METHODOLOGY = {
   scaling_factor: 1.35135,
   scaling_basis: 'Upstream evaluation multiplies hourly observed wind speed (magnitude of vector-averaged sub-hourly u/v) by 1.35135 before scoring; the code comment describes it as a 2 m to 10 m conversion sourced from meteoblue. Actual community mast heights and surroundings vary, so a single constant cannot correct every site and wind_speed errors include station-specific siting/exposure effects.',
-  observed_value_semantics: 'observed_value = daily mean of the already-scaled hourly observed wind speed (about 2.22 m/s raw-sensor equivalent at the 3.0 m/s threshold).',
+  observed_value_semantics: 'observed_value = daily mean of the already-scaled hourly observed wind speed; the 3.0 m/s threshold applies to this archived scaled value, not to raw anemometer readings. Provenance: inspected wxm-qof reference code (scaling precedes scoring), not a pinned 2025 deployment.',
   default_basis: 'all_hours',
   windier_days_subset_note: 'wind_speed_windier_days conditions on the observed outcome. It is not a height correction, exposure classifier, de-biasing step, proof of station quality or a preferred ranking.'
 };

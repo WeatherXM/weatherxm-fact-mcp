@@ -152,8 +152,9 @@ wind-speed subset (`curves_above_3ms` in the data files; `wind_speed_windier_day
 days" in the dashboard), built from the same 2025 daily evaluation records without changing them:
 
 - a station-day is included when its **daily mean observed wind speed** is at least 3.0 m/s. That
-  daily mean is computed from the hourly speeds **after** the 1.35135 factor, so the threshold
-  corresponds to about 2.22 m/s at the sensor;
+  daily mean is computed from the hourly speeds **after** the 1.35135 factor, so the threshold is on
+  the archived scaled value, not on raw anemometer readings (provenance: inspected reference
+  evaluation code, not a pinned copy of the 2025 deployment);
 - the same QoD ≥ 0.8 gate, ≥ 18 hourly pairs per day and gross-error screen apply; missing (NaN)
   observed values are excluded;
 - scores are pooled exactly from each record's hourly-pair-weighted sums, as everywhere else in FACT;

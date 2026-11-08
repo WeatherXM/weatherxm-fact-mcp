@@ -17,7 +17,8 @@ Semantics of observed_value (verified in wxm-qof forecast_evaluation/model):
     evaluation;
   * observed_value = daily mean of those (already scaled) hourly values
     (meteorology_utils.calculate_daily_rmse / output_utils).
-  So the 3.0 m/s threshold is on the SCALED daily mean (~2.22 m/s raw-sensor equivalent).
+  So the 3.0 m/s threshold is on the archived SCALED daily mean, not raw anemometer speed
+  (inspected reference code provenance, not a pinned 2025 deployment).
 
 This is a conditioned subset (windier days). It is NOT a height correction, NOT an
 exposure/siting classifier, NOT a de-biasing step and NOT a preferred ranking.
