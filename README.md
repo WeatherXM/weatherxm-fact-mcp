@@ -1,11 +1,11 @@
-# WeatherXM FACT — Forecast Accuracy Comparison Testbed (Methodology, Verification Pipeline & MCP Server)
+# WeatherXM FACT — Forecast Accuracy Tracking (Methodology, Verification Pipeline & MCP Server)
 
 [![Website](https://img.shields.io/badge/Interactive_Map-fact.weatherxm.com-0284c7)](https://fact.weatherxm.com)
 [![MCP Endpoint](https://img.shields.io/badge/Streamable_HTTP_MCP-fact.weatherxm.com%2Fmcp-10b981)](https://fact.weatherxm.com/mcp)
 [![WeatherXM FACT MCP Connector](https://glama.ai/mcp/connectors/com.weatherxm.fact/mcp/badges/score.svg)](https://glama.ai/mcp/connectors/com.weatherxm.fact/mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-**WeatherXM FACT (Forecast Accuracy Comparison Testbed)** is an empirical, station-based weather forecast verification benchmark scoring **45 numerical weather prediction (NWP), AI foundation, regional, and post-processed forecast models** against **8,927 quality-controlled physical WeatherXM ground stations** (**1.83 billion+ hourly forecast–observation evaluation records** across the 2025 archive).
+**WeatherXM FACT (Forecast Accuracy Tracking)** is an empirical, station-based weather forecast verification benchmark scoring **45 numerical weather prediction (NWP), AI foundation, regional, and post-processed forecast models** against **8,927 quality-controlled physical WeatherXM ground stations** (**1.83 billion+ hourly forecast–observation evaluation records** across the 2025 archive).
 
 This repository serves two purposes:
 1. **Scientific & Engineering Transparency (`docs/`, `pipeline/`, `examples/`):** Documents the exact verification methodology, quality-control gates (`QoD >= 0.80`), sample-weighted pooling math, categorical rain-event skill scores (`HSS`, `ETS`, `POD`, `FAR`, `CSI`), station-commissioned matched-cohort rules (`>= 90%` station-day overlap), and the DuckDB/Python/TypeScript aggregation and serving code behind [`fact.weatherxm.com`](https://fact.weatherxm.com).
