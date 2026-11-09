@@ -93,8 +93,8 @@ Raw measurements are turned into hourly values that match what the forecast repr
 |---|---|---|
 | Temperature (°C) | 1-minute mean nearest to the top of the hour, within ±10 minutes | 2 m temperature at that hour |
 | Relative humidity (%) | Same as temperature | 2 m relative humidity at that hour |
-| Wind speed (m/s) | Vector average of the hour's measurements, then scaled from sensor height to 10 m with a fixed factor (×1.35) | 10 m wind speed |
-| Wind direction (`wind_direction`, °) | Unit-vector average `atan2(mean(sin θ), mean(cos θ))` of the hour's compass bearings (meteorological "wind from", clockwise from true north; zero-speed calm intervals excluded); plus an active-wind series (`wind_direction_greater_than_3_m_s` / `wind_direction_above_3ms`) using only hours with observed wind speed > 3 m/s | 10 m wind direction |
+| Wind speed (m/s) | Magnitude of the vector-averaged u/v components of the hour's measurements, then multiplied by a fixed factor of 1.35135 (described in the pipeline as a 2 m → 10 m conversion sourced from meteoblue) before scoring. The factor is applied to every station regardless of actual mast height or surroundings | 10 m wind speed |
+| Wind direction (`wind_direction`, °) | Direction of the hour's vector-averaged u/v components, where each measurement contributes u = −v·sin θ, v = −v·cos θ (so it is speed-weighted and calm readings carry no weight); meteorological "wind from", clockwise from true north. Plus an active-wind series (`wind_direction_greater_than_3_m_s` / `wind_direction_above_3ms`) using only measurements with **raw sensor** speed > 3 m/s (before the 1.35135 factor) | 10 m wind direction |
 | Precipitation (mm) | Hourly difference of the cumulative rain counter, negative glitches set to zero | Hourly precipitation |
 | Daily precipitation (mm) | Difference of the rain counter across the UTC day | Sum of 24 hourly forecast values |
 | Pressure (hPa) | Station pressure reduced to mean sea level using the station's altitude and temperature | Mean sea-level pressure |
@@ -141,6 +141,33 @@ release HSS drives model selection inside WeatherXM MOSAIC, and both the interac
 the MCP/REST API expose full categorical precipitation skill (`HSS`, `ETS`, `POD`, `FAR`, `CSI`, and
 frequency bias) alongside millimetre MAE and RMSE.
 
+Pooled HSS across all lead days is not computed in this release. When a cell-level request asks for
+`lead_day=all`, the API returns the **lead day 1** HSS and says so explicitly
+(`horizon_lead_day` and `horizon_substitution_note` in the response).
+
+### 3.2a Optional wind-speed subset: windier station-days
+
+Default wind-speed rankings use **all valid hours**. FACT also publishes an optional, clearly separate
+wind-speed subset (`curves_above_3ms` in the data files; `wind_speed_windier_days` in the API, "Windier
+days" in the dashboard), built from the same 2025 daily evaluation records without changing them:
+
+- a station-day is included when its **daily mean observed wind speed** is at least 3.0 m/s. That
+  daily mean is computed from the hourly speeds **after** the 1.35135 factor, so the threshold is on
+  the archived scaled value, not on raw anemometer readings (provenance: inspected reference
+  evaluation code, not a pinned copy of the 2025 deployment);
+- the same QoD ≥ 0.8 gate, ≥ 18 hourly pairs per day and gross-error screen apply; missing (NaN)
+  observed values are excluded;
+- scores are pooled exactly from each record's hourly-pair-weighted sums, as everywhere else in FACT;
+- each result reports evaluated records (`samples`), distinct station × target-date pairs
+  (`station_days`), distinct stations (`stations`) and hourly pairs.
+
+What this subset is **not**: it is not a height correction, not a way to identify open or sheltered
+masts (a well-exposed station still has calm days, and a sheltered one can have windy days), not a
+de-biasing step, not proof of station quality and not a better ranking. Because it selects days by the
+observed outcome, models that tend to under-forecast wind look worse on it and models that tend to
+over-forecast look better. Treat it as "how did models do on windier days", next to, never instead of,
+the all-hours result. The wind-direction active-wind subset is a different, hour-level filter.
+
 ### 3.3 Lead time
 
 Lead time is measured from **when the model run started** (its initialization time, as reported by the
@@ -165,7 +192,7 @@ before any average is computed:
    QoD is WeatherXM's own quality system, run every day on every station (summarised in Section 4.1).
 2. **Minimum hourly support.** A station-day counts only if at least 18 of its 24 hours (75%) produced a
    valid pair for that model and variable (for the active-wind `wind_direction_greater_than_3_m_s` subset,
-   at least 3 valid hours with observed wind speed > 3 m/s are required).
+   at least 3 valid hours with raw sensor wind speed > 3 m/s are required).
 3. **Gross-error screen.** Station-days whose daily MAE exceeds a physical plausibility limit
    (40 °C for temperature, 30 m/s for wind speed, 180° for wind direction, 50 mm for precipitation,
    100% for humidity) are discarded as data faults. These limits are deliberately loose: they catch
@@ -393,6 +420,11 @@ when direction varies within the hour. **Effect:** wind errors are dominated by 
 conversions; they change little with lead time, which tells us they mostly measure the station rather
 than the forecast. Use wind rankings with caution.
 
+The fixed factor rescales speeds; it does not change computed wind directions. Physical siting still
+affects measured direction (obstacles deflect and channel flow), so direction scores are not free of
+station effects either. The optional windier-days speed subset (Section 3.2a) does not remove siting
+effects.
+
 ### 8.10 The delivered product, not the native model
 
 Third-party models are scored as delivered through one commercial multi-model API, at that provider's
@@ -408,9 +440,14 @@ cannot show how stable rankings are from year to year or how models handle rare 
 
 ### 8.12 Reproducibility
 
-The station data and forecast archive are proprietary, and the evaluation pipeline is not yet public.
-Readers cannot rerun the benchmark themselves today. We welcome scrutiny: researchers who want to audit
-the pipeline or test it on a subset of the data can contact WeatherXM.
+The station data, forecast archive and evaluation pipeline remain proprietary, so readers cannot rerun
+the raw scoring themselves. What is public: the published aggregate files, this methodology, and an
+open-source reference MCP server and re-indexer
+([WeatherXM/weatherxm-fact-mcp](https://github.com/WeatherXM/weatherxm-fact-mcp)) that rebuilds the
+API answers from those published files. The published files carry rounded MAE and RMSE with sample
+counts, not the full underlying sums, so they cannot be recombined exactly and cannot recover scores for
+station subsets, periods or filters that were not published. Researchers who want to audit the pipeline or test it on a
+subset of the data can contact WeatherXM.
 
 ---
 

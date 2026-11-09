@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { spawn, execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 
@@ -25,3 +26,5 @@ console.log('✅ stdio MCP server initialize + tools/list passed (4 tools verifi
 
 // 2. Run reference Python verification formulas
 execFileSync('python3', ['examples/verification_formulas.py'], { stdio: 'inherit' });
+
+assert.equal(fs.readFileSync('src/index.mjs', 'utf8'), fs.readFileSync('src/index.ts', 'utf8'), 'src/index.mjs and src/index.ts must stay identical');

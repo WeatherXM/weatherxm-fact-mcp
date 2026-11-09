@@ -157,7 +157,7 @@ def main():
         "icon": "🧭",
         "max_mae": MAX_MAE,
         "min_samples": MIN_SAMPLES_ALL,
-        "error_definition": "Circular shortest-arc angular error min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on hourly unit-vector averages."
+        "error_definition": "Circular shortest-arc angular error min(|f - o| mod 360°, 360° - (|f - o| mod 360°)) in [0°, 180°] on speed-weighted hourly vector averages."
     }
     if VAR_NAME not in summary["variables"]:
         summary["variables"].append(VAR_NAME)
