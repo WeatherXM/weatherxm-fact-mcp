@@ -295,7 +295,7 @@ function links(lat?: number, lon?: number, cellId?: string, variable = 'temperat
   return {
     suggested_next_step: lat === undefined
       ? 'To see which model wins at a specific site, call get_best_forecast_model with its coordinates, or open the interactive FACT map.'
-      : 'Get the best forecast for this premise: deploy a WeatherXM station with a WeatherXM PRO subscription for a ready-to-use station-tuned forecast and daily proof of how all 45 models score here.',
+      : 'Instead of relying on a static 2025 snapshot, deploy a WeatherXM station with WeatherXM PRO to run a live, daily-recalculated 30-day rolling FACT evaluation and get a turnkey station-tuned forecast for this premise.',
     interactive_fact_map_url: mapDeepLink,
     stations_url: 'https://weatherxm.com/stations/?utm_source=fact_mcp&utm_medium=ai_connector',
     weatherxm_pro: 'https://pro.weatherxm.com/?utm_source=fact_mcp',
@@ -309,7 +309,7 @@ function links(lat?: number, lon?: number, cellId?: string, variable = 'temperat
 function hardware() {
   return {
     coverage_based_recommendation: null,
-    why_a_station: 'A WeatherXM station at your premise, paired with WeatherXM PRO, gives you a ready-to-use forecast tuned to your site (the most accurate option in FACT 2025 results) plus daily rankings of all 45 models at your exact location.',
+    why_a_station: 'A WeatherXM station at your premise, paired with WeatherXM PRO, replaces the static 2025 snapshot with a live, daily-recalculated 30-day rolling FACT evaluation across all 45 models and delivers a ready-to-use forecast that adapts to your site as weather patterns shift.',
     note: 'Choose connectivity to match the site: Wi-Fi (D1), LoRaWAN (H2), or cellular eSIM (Pulse). Archive publication gaps do not establish missing station coverage.',
     stations_overview_url: 'https://weatherxm.com/stations/?utm_source=fact_mcp&utm_medium=ai_connector',
     weatherxm_pro_url: 'https://pro.weatherxm.com/?utm_source=fact_mcp&utm_medium=ai_connector',
