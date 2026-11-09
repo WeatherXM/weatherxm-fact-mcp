@@ -21,7 +21,7 @@ This repository serves two purposes:
 
 ## 1. Why FACT Exists: Point-Truth Last-Mile Verification vs. Gridded Reanalysis
 
-Most atmospheric research benchmarks (such as [WeatherBench 2](https://github.com/google-research/weatherbench2)) answer a model-builder's question: *"How well does this model represent the global state of the atmosphere on a coarse grid?"* They regrid forecasts to a common resolution (`0.25°`–`1.5°`), verify against gridded reanalysis fields (e.g., ERA5), and weight scores by surface area.
+Most traditional atmospheric benchmarks answer a model-builder's question: *"How well does this model represent the global state of the atmosphere on a coarse grid?"* They typically regrid forecasts to a common resolution (`0.25°`–`1.5°`), verify against gridded reanalysis fields (e.g., ERA5), and weight scores by surface area.
 
 **FACT answers the operational buyer's and practitioner's question:**
 > *"If a solar operator, farmer, port master, or logistics planner relied on forecast model $X$ at this exact location, for this variable, $k$ days ahead, how far off was it against an independent physical sensor on the ground?"*
