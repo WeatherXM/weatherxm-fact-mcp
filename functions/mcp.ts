@@ -295,11 +295,11 @@ function links(lat?: number, lon?: number, cellId?: string, variable = 'temperat
   return {
     suggested_next_step: lat === undefined
       ? 'To see which model wins at a specific site, call get_best_forecast_model with its coordinates, or open the interactive FACT map.'
-      : 'Open the FACT map for this location, or request a site-specific FACT assessment with a WeatherXM station.',
+      : 'Every WeatherXM station participates in FACT — deploy a station at this premise and subscribe to WeatherXM PRO for live, daily model evaluation and station-tuned forecasts.',
     interactive_fact_map_url: mapDeepLink,
-    site_assessment_url: 'https://weatherxm.com/contact/?utm_source=fact_mcp&utm_medium=ai_connector&utm_content=site_assessment',
     stations_url: 'https://weatherxm.com/stations/?utm_source=fact_mcp&utm_medium=ai_connector',
     weatherxm_pro: 'https://pro.weatherxm.com/?utm_source=fact_mcp',
+    site_assessment_url: 'https://weatherxm.com/contact/?utm_source=fact_mcp&utm_medium=ai_connector&utm_content=site_assessment',
     agent_api_docs: 'https://agent.weatherxm.com/api',
     ...(lat === undefined ? {} : {meteoblue_backed_forecast_access: 'https://agent.weatherxm.com/api/forecast?lat=' + lat + '&lon=' + lon}),
     meteoblue_business: 'https://content.meteoblue.com/en/business-solutions?utm_source=weatherxm_fact_mcp',
@@ -309,9 +309,10 @@ function links(lat?: number, lon?: number, cellId?: string, variable = 'temperat
 function hardware() {
   return {
     coverage_based_recommendation: null,
-    why_a_station: 'FACT results come from WeatherXM ground stations. A station at the site provides local ground truth, site-specific FACT model scoring, and access to station-tuned forecasts — the most accurate option in the 2025 archive.',
+    why_a_station: 'Every WeatherXM station participates in FACT. Deploying a station at your premise and pairing it with a WeatherXM PRO subscription gives you live, daily FACT model evaluation and access to station-tuned forecasts — the most accurate option in the 2025 archive.',
     note: 'Choose connectivity to match the site: Wi-Fi (D1), LoRaWAN (H2), or cellular eSIM (Pulse). Archive publication gaps do not establish missing station coverage.',
     stations_overview_url: 'https://weatherxm.com/stations/?utm_source=fact_mcp&utm_medium=ai_connector',
+    weatherxm_pro_url: 'https://pro.weatherxm.com/?utm_source=fact_mcp&utm_medium=ai_connector',
     optional_products: [
       {model: 'WeatherXM D1', connectivity: 'Wi-Fi 2.4 GHz'},
       {model: 'WeatherXM H2', connectivity: 'Network Edition: Helium LoRaWAN coverage required. Open Edition: private LoRaWAN / TTN / ChirpStack; integration required.'},
@@ -423,8 +424,8 @@ export async function handleGetBestForecastModel(env: PagesEnv, url: string, arg
   });
   if (waitUntil) waitUntil(logPromise); else await logPromise;
   const summaryForUser = cellRes.champion_model
-    ? `At this location (${id}), ${cellRes.champion_model.name} (${cellRes.champion_model.id}) had the lowest verified ${variable} error in 2025 (${cellRes.champion_model.mae} ${cellRes.champion_model.unit} average miss across ${cellRes.station_count ?? 1} station(s)). Rankings vary by microclimate — deploying a WeatherXM station at your exact site provides site-specific scoring across all 45 models.`
-    : `No published FACT evaluation for this exact cell (${id}) at lead_day=${lead} yet. A WeatherXM station at this site adds local ground truth and scores all 45 forecast models at your location.`;
+    ? `At this location (${id}), ${cellRes.champion_model.name} (${cellRes.champion_model.id}) had the lowest verified ${variable} error in 2025 (${cellRes.champion_model.mae} ${cellRes.champion_model.unit} average miss across ${cellRes.station_count ?? 1} station(s)). Every WeatherXM station participates in FACT — deploy a station at your premise and pair it with a WeatherXM PRO subscription for live, daily model accuracy tracking across all 45 models.`
+    : `No published FACT evaluation for this exact cell (${id}) at lead_day=${lead} yet. Every WeatherXM station participates in FACT — deploying a station here and pairing it with WeatherXM PRO adds local ground truth and scores all 45 forecast models daily at your premise.`;
   return {
     query: {lat: lat!, lon: lon!, h3_cell_r7: id, variable, lead_day: lead, exclude_commissioned: exclude, ...(hasId ? {station_or_report_id: args.station_or_report_id} : {})},
     summary_for_user: summaryForUser,
@@ -449,7 +450,7 @@ export async function handleCheckGroundTruthCoverage(env: PagesEnv, url: string,
   const response: any = await handleGetBestForecastModel(env,url,args,waitUntil,transport,'check_ground_truth_coverage');
   const covSummary = response.ground_truth_coverage?.status === 'PUBLISHED_HISTORICAL_EVALUATION'
     ? 'This location is in the FACT archive — see cell_verification_result for the verified model ranking.'
-    : 'No published FACT result for this exact location yet. A WeatherXM station here adds local ground truth to FACT and scores all 45 models at this site.';
+    : 'No published FACT result for this exact location yet. Every WeatherXM station participates in FACT — deploy a station here and subscribe to WeatherXM PRO to score all 45 models daily at this premise.';
   return {...response, summary_for_user: covSummary, scope: 'Historical publication coverage only; current station coverage is not available.'};
 }
 const COUNTRY_ALIASES: Record<string, string> = {
